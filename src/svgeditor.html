@@ -33,12 +33,18 @@ div.tool{
     cursor: default;
 }
 
-div.tool:hover, #filename{
+div.tool:hover, div#filename{
 	background: #e1e1e1;
 }
 
-div.tool:nth-child(6){
+div#filename{
 	margin-left: auto;
+}
+
+div#account{
+	background: #b30000;
+	color: white;
+	border-radius: 50%;
 }
 
 div.imgtoolgroup{
@@ -54,6 +60,19 @@ div.imgtool{
 	height: 18px;
 	background-image: url("icons.png");
 	background-size: 150px 90px;
+}
+
+.overview-settings-head, .overview-item, .overview-item-active{
+	padding: 11px 5px;
+	font-size: 12px;
+}
+
+.overview-settings-head{
+	background: #f0efef;
+}
+
+.overview-item-active{
+	background: #e1e1e1;
 }
 
 </style>
@@ -72,14 +91,24 @@ class Editor:
 		#self.layout = TestElement([Len(220, 7), Len(230, 8), Len(70, 5), Len(-45, 9)], "green", (5, "silver"), pi/6, "https://www.online-image-editor.com/styles/2019/images/power_girl.png")
 		#self.layout = TestElement([Len(220, 7), Len(230, 8), Len(100, 5), Len(-19, 9)], "green", (1, "silver"), pi/6, "Hello world")
 		#self.layout = TestElement([Len(50, 9), Len(22, 8), Len(110, 3), Len(80, 7), Len(38, 11), Len(121, 9)], "orange", (3, "teal"), 0)
+		self.transform = Transform()
 		self.layout = TestLayout([Len(190), Len(210), Len(220), Len(206)], "grey", (1, "gold"), pi/6, [
 			TestRect([Len(10, 5), Len(10, 8), Len(100, 8), Len(50, -4)], "orange", rotation = pi/6),
-			TestLine([Len(0, 2), Len(4, 8), Len(22, 3), Len(112, 5), Len(100, 7), Len(112, 3)], "transparent", (2, "blue"), pi/6)
+			TestLine([Len(0, 2), Len(4, 8), Len(22, 3), Len(112, 5), Len(100, 7), Len(112, 3)], "transparent", (2, "blue"), pi/6),
+			self.transform
 		])
-		self.win = GraphWin(self.layout)
+		self.win = GraphWin(self.layout, window.innerWidth - 250 - 250, window.innerHeight - 75)
+		self.__start()
+		
+	def __start(self):
+		window.addEventListener("resize", self.__resize)
+		
+	def __resize(self, event):
+		self.win.set_size(window.innerWidth - 250 - 285, window.innerHeight - 75)
+		
 		
 	def run(self):
-		print()
+		self.transform.view()
 		
 class GraphWin:
 	def __init__(self, layout, width = 800, height = 500):
@@ -161,6 +190,10 @@ class GraphWin:
 		self.__canvas.attrs["width" ] = width  * dpr
 		self.__canvas.attrs["height"] = height * dpr
 		self.__ctx.scale(dpr, dpr)
+		self.require_refresh()
+		
+	def require_refresh(self):
+		self.__auto_refresh = True
 		
 @dataclass
 class Len:
@@ -346,6 +379,17 @@ class LayoutBase(Rect):
 		x, y = TransTools.rotate(x, y, width/2, height/2, -self.rotation)
 		for lower_widget in self.lower_widgets:
 			lower_widget.mouse_event(event_type, x, y, event, (width, height))
+			
+class Transform(LayoutBase):
+	def __init__(self):
+		super().__init__([Len(0), Len(0), Len(0), Len(0)], "transparent", (0, "transparent"), 0, [])
+		self.lower_nodes = []
+		
+	def view(self):
+		self.border = (1, "red")
+		
+	def hide(self):
+		self.border = (0, "transparent")
 		
 class TestElement:
 	def on_touch_start(self, x, y, event):
@@ -425,9 +469,9 @@ if __name__ == "__main__":
 		<div class = "tool">View</div>
 		<div class = "tool">Help</div>
 		<div class = "tool" id = "filename">untitled.svg</div>
-		<div class = "tool">WT</div>
+		<div class = "tool" id = "account">WT</div>
 	</div>
-	<div class = "toolbar">
+	<div class = "toolbar" style = "overflow: hidden">
 		<div class = "imgtoolgroup">
 			<div class = "imgtool" style = "background-position:   0px   0px"></div>
 			<div class = "imgtool" style = "background-position:   0px -19px"></div>
@@ -475,13 +519,24 @@ if __name__ == "__main__":
 		<div class = "imgtoolgroup">
 			<div class = "imgtool" style = "background-position: -72px -54px"></div>
 		</div>
-		<div class = "imgtool" style = "background-position: -72px -72px"></div>
-		<button id = "redraw_button">Redraw</button>
 	</div>
 	<div class = "content">
-		<div>...</div>
+		<div style = "width: 250px;">
+			<div style = "height: 50%">
+				<div class = "overview-settings-head">Pages</div>
+				<div>
+					<div class = "overview-item-active">Page 1</div>
+				</div>
+			</div>
+			<div style = "height: 50%">
+				<div class = "overview-settings-head">Layers</div>
+				<div>
+					<div class = "overview-item">Layer 1</div>
+				</div>
+			</div>
+		</div>
 		<canvas id="my_canvas" style="border:1px solid silver"></canvas>
-		<div>...</div>
+		<div style = "width: 285px;"></div>
 	</div>
 </body>
 </html>
