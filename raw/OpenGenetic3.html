@@ -1,0 +1,555 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+    <script src="https://cdn.jsdelivr.net/npm/brython@3/brython.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3/brython_stdlib.js"></script>
+</head>
+<body onload="brython()">
+<button>Cursor</button>
+<button>Line</button>
+<button>Rect</button>
+<button>Ellipse</button>
+<button>Picture</button>
+<button>Text</button>
+<button id = "redraw_button">Redraw</button>
+<canvas id="my_canvas" style = "border: 1px solid silver" width = "2000" height = "1000"></canvas>
+<script type="text/python">
+
+from browser import document, window
+from math import *
+
+class Stage:
+	def __init__(self, layout):
+		self.canvas = document.getElementById("my_canvas")
+		self.ctx = self.canvas.getContext("2d")
+		self.layout = layout
+		self.auto_flush = True
+		self.dragging = False
+		
+	def start(self):
+		self.canvas.addEventListener("mousemove", self.on_mouse_move)
+		self.canvas.addEventListener("mousedown", self.on_mouse_down)
+		self.canvas.addEventListener("mouseup", self.on_mouse_up)
+		window.setInterval(self.app_loop, 100)
+		
+	def on_mouse_move(self, evt):
+		self.layout.mouse_event("on_mouse_move", evt.offsetX, evt.offsetY, evt)
+		if self.dragging:
+			self.layout.mouse_event("on_drag", evt.offsetX, evt.offsetY, evt)
+		
+	def on_mouse_down(self, evt):
+		self.layout.mouse_event("on_mouse_down", evt.offsetX, evt.offsetY, evt)
+		self.layout.mouse_event("on_drag_start", evt.offsetX, evt.offsetY, evt)
+		self.dragging = True
+		
+	def on_mouse_up(self, evt):
+		self.layout.mouse_event("on_mouse_up", evt.offsetX, evt.offsetY, evt)
+		if self.dragging:
+			self.layout.mouse_event("on_drag_end", evt.offsetX, evt.offsetY, evt)
+			self.dragging = False
+		
+	def app_loop(self):
+		if self.auto_flush:
+			print("ongoing on refreshig")
+			self.ctx.clearRect(0, 0, self.canvas.width, self.canvas.height)
+			self.layout.draw(self.ctx)
+			self.auto_flush = False
+			
+class Border:
+	def __init__(self, size, color):
+		self.size = size
+		self.color = color
+		
+class WidgetBase:
+	def __init__(self, color = "black"):
+		self.color = color
+		self.border = None
+		
+	def mouse_event(self, method_name, x, y, event):
+		if not self.is_inside(x, y):
+			method_name = method_name + "_out"
+		if hasattr(self, method_name):
+			getattr(self, method_name)(x, y, event)
+	
+class Line(WidgetBase):
+	def __init__(self, pos, color = "black"):
+		super().__init__(color)
+		self.pos = pos
+		
+	def draw(self, ctx):
+		ctx.strokeStyle = self.color
+		ctx.beginPath()
+		ctx.moveTo(self.pos[0], self.pos[1])
+		for i in range(2, len(self.pos), 2):
+			ctx.lineTo(self.pos[i], self.pos[i+1])
+		ctx.stroke()
+	
+	def is_inside(self, x, y):
+		for i in range(0, len(self.pos)-2, 2):
+			[x1, y1, x2, y2] = self.pos[i:i+4]
+			d1 = sqrt((x1-x)**2 + (y1-y)**2)
+			d2 = sqrt((x2-x)**2 + (y2-y)**2)
+			lineLen = sqrt((x2-x1)**2 + (y2-y1)**2)
+			if d1+d2 >= lineLen - 0.1 and d1+d2 <= lineLen + 0.1:
+				return True
+		return False
+		
+	def move(self, delta_x, delta_y):
+		for i in range(0, len(self.pos), 2):
+			self.pos[i] = self.pos[i] + delta_x
+			self.pos[i+1] = self.pos[i+1] + delta_y
+
+	def expand(self, delta_width, delta_height):
+		x, y, width, height = self.to_rect()
+		new_width = width + delta_width
+		new_height = height + delta_height
+		for i in range(0, len(self.pos), 2):
+			self.pos[ i ] = (self.pos[ i ] - x)/width  * new_width  + x
+			self.pos[i+1] = (self.pos[i+1] - y)/height * new_height + y
+		
+	def to_rect(self):
+		x_pos = self.pos[::2]
+		y_pos = self.pos[1::2]
+		x = min(x_pos)
+		y = min(y_pos)
+		return [x, y, max(x_pos) - x, max(y_pos) - y]
+		
+	
+class Rect(WidgetBase):
+	def __init__(self, x, y, width, height, color = "black"):
+		super().__init__(color)
+		self.x = x
+		self.y = y
+		self.width = width
+		self.height = height
+		
+	def draw(self, ctx):
+		ctx.fillStyle = self.color
+		ctx.beginPath()
+		ctx.fillRect(self.x, self.y, self.width, self.height)
+		ctx.closePath()
+		if self.border:
+			ctx.strokeStyle = self.border.color
+			ctx.beginPath()
+			ctx.strokeRect(self.x, self.y, self.width, self.height)
+			ctx.closePath()
+			
+	def move(self, delta_x, delta_y):
+		self.x = self.x + delta_x
+		self.y = self.y + delta_y
+
+	def expand(self, delta_x, delta_y):
+		self.width = self.width + delta_x
+		self.height = self.height + delta_y
+		
+	def is_inside(self, x, y):
+		return self.x < x < self.x + self.width and self.y < y < self.y + self.height
+		
+	def to_rect(self):
+		return [self.x, self.y, self.width, self.height]
+		
+class Ellipse(Rect):
+	def draw(self, ctx):
+		ctx.fillStyle = self.color
+		ctx.beginPath()
+		ctx.ellipse(self.x, self.y, self.width, self.height, 0, 0, 2*pi)
+		ctx.closePath()
+		ctx.fill()
+		if self.border:
+			ctx.stroke()
+			
+	def expand(self, delta_width, delta_height):
+		super().move(delta_width / 2, delta_height / 2)
+		super().expand(delta_width / 2, delta_height / 2)
+		
+		
+	def is_inside(self, x, y):
+		return (x-self.x)**2/self.width**2 + (y-self.y)**2/self.height**2 <= 1
+		
+	def to_rect(self):
+		return [self.x-self.width, self.y-self.height, 2*self.width, 2*self.height]
+		
+class Picture(Rect):
+	def __init__(self, x, y, width, height, src_image):
+		super().__init__(x, y, width, height)
+		self.image = document.createElement("img")
+		self.image.src = src_image
+		
+	def draw(self, ctx):
+		ctx.drawImage(self.image, self.x, self.y, self.width, self.height)
+		
+class Text(Rect):
+	def __init__(self, x, y, width, height, text, color = "black", font = "Arial"):
+		super().__init__(x, y, width, height, color)
+		self.font = font
+		self.text = text
+		
+	def draw(self, ctx):
+		ctx.fillStyle = self.color
+		ctx.font = f"{self.height}px {self.font}"
+		ctx.textBaseline = "top"
+		ctx.fillText(self.text, self.x, self.y)
+		
+class LayoutBase(Rect):
+	def __init__(self, x, y, width, height, color, lower_widgets):
+		super().__init__(x, y, width, height, color)
+		self.lower_widgets = lower_widgets
+		self.scale_x = 1
+		self.scale_y = 1
+		
+	def set_scale(self, scale_x, scale_y):
+		self.scale_x = scale_x
+		self.scale_y = scale_y
+		
+	def append(self, lower_widget):
+		self.lower_widgets.append(lower_widget)
+		
+	def draw(self, ctx):
+		super().draw(ctx)
+		ctx.save()
+		ctx.translate(self.x, self.y)
+		ctx.save()
+		ctx.scale(self.scale_x, self.scale_y)
+		for lower_widget in self.lower_widgets:
+			lower_widget.draw(ctx)
+		ctx.restore()
+		ctx.restore()
+		
+	def mouse_event(self, method_name, global_x, global_y, event):
+		super().mouse_event(method_name, global_x, global_y, event)
+		x = (global_x - self.x)/self.scale_x
+		y = (global_y - self.y)/self.scale_y
+		for lower_widget in self.lower_widgets:
+			lower_widget.mouse_event(method_name, x, y, event)
+		
+class CoordinatorLayout(LayoutBase):
+	pass
+		
+class SVGEditorWorkingPaper(CoordinatorLayout):
+	def __init__(self, x, y, width, height, color, lower_widgets):
+		super().__init__(x, y, width, height, color, lower_widgets)
+		self.state = SVGEditorWorkingPaperReadyState(self)
+		self.old_x = 0
+		self.old_y = 0
+		
+	def to_svg(self):
+		size = f'width = "{self.width}" height = "{self.height}"'
+		view_box = f'viewBox="0 0 {self.width} {self.height}"'
+		xmlns = 'xmlns="http://www.w3.org/2000/svg"'
+		result = f'<svg {view_box} {size} {xmlns}>'
+		for lower_widget in self.lower_widgets:
+			result = result + lower_widget.to_svg()
+		return result + "</svg>"
+		
+	def change_state(self, state):
+		self.state = state
+	
+	def on_mouse_down(self, x, y, event):
+		self.state.on_mouse_down(x, y, event)
+		
+	def on_mouse_down_out(self, x, y, event):
+		self.state.on_mouse_down(x, y, event)
+		
+	def on_drag_start(self, x, y, event):
+		self.state.on_drag_start(x, y, event)
+		
+	def on_drag_start_out(self, x, y, event):
+		self.state.on_drag_start(x, y, event)
+		
+	def on_drag(self, x, y, event):
+		self.state.on_drag(x, y, event)
+		
+	def on_drag_out(self, x, y, event):
+		self.state.on_drag(x, y, event)
+
+class ActiveSelectGroup(LayoutBase):
+	def __init__(self, x, y, width, height):
+		super().__init__(x, y, width, height, "transparent", [
+			ResizeWidget(0    ,      0, 5, 5, "#3D81E9", -1, -1, self),
+			ResizeWidget(width,      0, 5, 5, "#3D81E9", 1 , -1, self),
+			ResizeWidget(0    , height, 5, 5, "#3D81E9", -1, 1 , self),
+			ResizeWidget(width, height, 5, 5, "#3D81E9", 1 , 1 , self)
+		])
+		self.order = [0, 1, 2, 3]
+		self.border = Border(1, "#3D81E9")
+		self.selected_widgets = []
+			
+	def move_lower(self, delta_x, delta_y):
+		for selected_widget in self.selected_widgets:
+			selected_widget.move(delta_x, delta_y)
+
+	def expand_lower(self, delta_width, delta_height):
+		self.selected_widgets[0].expand(delta_width, delta_height)
+
+	def is_inside_lower(self, x, y):
+		x = (x - self.x)/self.scale_x
+		y = (y - self.y)/self.scale_y
+		for lower_widget in self.lower_widgets:
+			if lower_widget.is_inside(x, y):
+				return True
+		return False
+
+	def adjust(self):
+		self.lower_widgets[self.order[1]].x = self.width
+		self.lower_widgets[self.order[2]].y = self.height
+		self.lower_widgets[self.order[3]].x = self.width
+		self.lower_widgets[self.order[3]].y = self.height
+	
+	def flip_x(self):
+		self.order = [self.order[2], self.order[3], self.order[0], self.order[1]]
+		
+	def flip_y(self):
+		self.order = [self.order[1], self.order[0], self.order[3], self.order[2]]
+
+	def has(self, widget_reference):
+		for selected_widget in self.selected_widgets:
+			if widget_reference is selected_widget:
+				return True
+		return False
+		
+	def delete_lower(self):
+		self.lower_widgets = []
+
+class ResizeWidget(Ellipse):
+	def __init__(self, x, y, width, height, color, dir_x, dir_y, upper):
+		super().__init__(x, y, width, height, color)
+		self.upper = upper
+		self.paper = l.lower_widgets[0]
+		self.dir_x = dir_x
+		self.dir_y = dir_y
+		self.old_global_x = 0
+		self.old_global_y = 0
+		self.old_local_x = 0
+		self.old_local_y = 0
+
+	def on_drag_start(self, x, y, evt):
+		self.old_global_x = evt.offsetX
+		self.old_global_y = evt.offsetY
+		self.old_local_x = (evt.offsetX - self.paper.x)/self.paper.scale_x
+		self.old_local_y = (evt.offsetY - self.paper.y)/self.paper.scale_y
+
+	def on_drag(self, x, y, evt):
+		new_global_x = evt.offsetX
+		new_global_y = evt.offsetY
+		new_local_x = (evt.offsetX - self.paper.x)/self.paper.scale_x
+		new_local_y = (evt.offsetY - self.paper.y)/self.paper.scale_y
+		delta_global_x = new_global_x - self.old_global_x
+		delta_global_y = new_global_y - self.old_global_y
+		delta_local_x = new_local_x - self.old_local_x
+		delta_local_y = new_local_y - self.old_local_y
+		self.old_global_x = new_global_x
+		self.old_global_y = new_global_y
+		self.old_local_x = new_local_x
+		self.old_local_y = new_local_y
+		
+		#print(self.dir_x, self.dir_y, self.upper.width, self.upper.height)
+		#print("Prediction", self.upper.width + delta_global_x * self.dir_x, self.upper.height + delta_global_y * self.dir_y)
+		
+		if self.upper.width + delta_global_x * self.dir_x <= 0:
+			print("Negative width")
+			self.upper.flip_x()
+			self.upper.delete_lower()
+			return
+		
+		if self.upper.height + delta_global_y * self.dir_y <= 0:
+			print("Negative height")
+			self.upper.flip_y()
+			self.upper.delete_lower()
+			return
+		
+		
+		if self.dir_x == 1:
+			self.upper.move(-delta_global_x, 0)
+			self.upper.move_lower(-delta_local_x, 0)
+		if self.dir_y == 1:
+			self.upper.move(0, -delta_global_y)
+			self.upper.move_lower(0, -delta_local_y)
+		
+		
+		self.upper.expand(delta_global_x * self.dir_x, delta_global_y * self.dir_y)
+		#print("moving", self.upper.x, self.upper.y, delta_local_x, delta_local_y)
+		self.upper.adjust()
+		self.upper.expand_lower(delta_local_x * self.dir_x, delta_local_y * self.dir_y)
+		#print("Resizewidget on drag", delta_local_x, delta_local_y)
+		s.auto_flush = True
+		
+	def on_drag_end(self, x, y, evt):
+		pass
+		
+class SVGElementMouse:
+	pass
+	
+class SVGLine(Line, SVGElementMouse):
+	def to_svg(self):
+		pos_net = f"M{self.pos[0]} {self.pos[1]}"
+		for i in range(2, len(self.pos), 2):
+			pos_net = pos_net + f" L{self.pos[i]} {self.pos[i+1]}"
+		colors = f'fill="transparent" stroke="{self.color}"'
+		return f'<path d="{pos_net}" {colors} />'
+	
+class SVGRect(Rect, SVGElementMouse):
+	def to_svg(self):
+		pos = f'x="{self.x}" y="{self.y}" width="{self.width}" height="{self.height}"'
+		colors = f'fill="{self.color}"'
+		if self.border:
+			colors += f'stroke="{self.border.color}" stroke-width="{self.border.size}"'
+		return f'<rect {pos} {colors}/>'
+	
+class SVGEllipse(Ellipse, SVGElementMouse):
+	def to_svg(self):
+		pos = f'cx="{self.x}" cy="{self.y}" rx="{self.width}" ry="{self.height}"'
+		colors = f'fill="{self.color}" '
+		if self.border:
+			colors += f'stroke="{self.border.color}" stroke-width="{self.border.size}"'
+		return f'<ellipse {pos} {colors}/>'
+	
+class SVGPicture(Picture, SVGElementMouse):
+	def to_svg(self):
+		pos = f'x="{self.x}" y="{self.y}" width="{self.width}" height="{self.height}"'
+		link = f'href="{self.image.src}"'
+		return f'<image {link} {pos} />'
+	
+class SVGText(Text, SVGElementMouse):
+	def to_svg(self):
+		pos = f'x="{self.x}" y="{self.y}" width="{self.width}" height="{self.height}"'
+		font = f'font-size="{self.height}" font-family="Arial" dominant-baseline="hanging"'
+		colors = f'fill="{self.color}"'
+		return f'<text {pos} {colors} {font}>{self.text}</text>'
+	
+class SVGGroup(LayoutBase, SVGElementMouse):
+	def to_svg(self):
+		translate = f'translate({self.x}, {self.y})'
+		scale = f'scale({self.scale_x}, {self.scale_y})'
+		size = f'width="{self.width}" height="{self.height}"'
+		colors = f'color="{self.color}"'
+		result = f'<g transform="{translate} {scale}" {size} {colors}>'
+		for lower_widget in self.lower_widgets:
+			result = result + lower_widget.to_svg()
+		return result + "</g>"
+		
+class State:
+	def __init__(self, controller):
+		self.controller = controller
+		self.old_global_x = 0
+		self.old_global_y = 0
+		self.old_local_x = 0
+		self.old_local_y = 0
+		
+class SVGEditorWorkingPaperReadyState(State):
+	def on_mouse_down(self, global_x, global_y, event):
+		upper = self.controller
+		x = (global_x - upper.x)/upper.scale_x
+		y = (global_y - upper.y)/upper.scale_y
+		selected = False
+		for i in range(len(upper.lower_widgets)-1, -1, -1):
+			lower_widget = upper.lower_widgets[i]
+			if lower_widget.is_inside(x, y):
+				selected = True
+				rect = lower_widget.to_rect()
+				x = rect[0]*upper.scale_x+upper.x
+				y = rect[1]*upper.scale_y+upper.y
+				w = rect[2]*upper.scale_x
+				h = rect[3]*upper.scale_y
+				if event.ctrlKey and type(l.lower_widgets[1]) == ActiveSelectGroup:
+					w_x, w_y, w_width, w_height = lower_widget.to_rect()
+					s_x, s_y, s_width, s_height = l.lower_widgets[1].to_rect()
+					w_x_max = w_x + w_width
+					w_y_max = w_y + w_height
+					s_x_max = s_x + s_width
+					s_y_max = s_y + s_height
+					new_x = min(w_x * upper.scale_x + upper.x, s_x)
+					new_y = min(w_y * upper.scale_y + upper.y, s_y)
+					new_x_max = max(w_x_max *upper.scale_x + upper.x, s_x_max)
+					new_y_max = max(w_y_max *upper.scale_y + upper.y, s_y_max)
+					l.lower_widgets[1].x = new_x
+					l.lower_widgets[1].y = new_y
+					l.lower_widgets[1].width = new_x_max - new_x
+					l.lower_widgets[1].height = new_y_max - new_y
+					l.lower_widgets[1].selected_widgets.append(lower_widget)
+					l.lower_widgets[1].adjust()
+				else:
+					if type(l.lower_widgets[1]) != ActiveSelectGroup:
+						l.lower_widgets[1] = ActiveSelectGroup(x, y, w, h)
+						l.lower_widgets[1].selected_widgets = [lower_widget]					
+					if not l.lower_widgets[1].has(lower_widget):
+						selected = False
+					
+				s.auto_flush = True
+				break
+		
+		if type(l.lower_widgets[1]) == ActiveSelectGroup:
+			if l.lower_widgets[1].is_inside_lower(global_x, global_y):
+				selected = True
+		
+		if not selected and type(l.lower_widgets[1]) == ActiveSelectGroup:
+			l.lower_widgets[1] = Rect(0, 0, 0, 0)
+			s.auto_flush = True
+			
+	def on_drag_start(self, x, y, event):
+		upper = self.controller
+		if type(l.lower_widgets[1]) == ActiveSelectGroup:
+			self.old_local_x = (x - upper.x)/upper.scale_x
+			self.old_local_y = (y - upper.y)/upper.scale_y
+			self.old_global_x = x
+			self.old_global_y = y
+		
+	def on_drag(self, x, y, event):
+		upper = self.controller
+		if type(l.lower_widgets[1]) == ActiveSelectGroup:
+			new_local_x = (x - upper.x)/upper.scale_x
+			new_local_y = (y - upper.y)/upper.scale_y
+			delta_local_x = new_local_x - self.old_local_x
+			delta_local_y = new_local_y - self.old_local_y
+			delta_global_x = x - self.old_global_x
+			delta_global_y = y - self.old_global_y
+			self.old_local_x = new_local_x
+			self.old_local_y = new_local_y
+			self.old_global_x = x
+			self.old_global_y = y
+			l.lower_widgets[1].move(delta_global_x, delta_global_y)
+			l.lower_widgets[1].move_lower(delta_local_x, delta_local_y)
+			s.auto_flush = True
+	
+
+#l = Line([10, 20, 30, 40, 30, 90], "blue")
+#l = Ellipse(80, 90, 20, 15, "orange")
+#l = Picture(25, 30, 200, 150, "https://fujifilm-x.com/wp-content/uploads/2021/01/gfx100s_sample_04_thum-1.jpg")
+#l = Text(20, 30, 100, 19, "hello world")
+
+l = CoordinatorLayout(0, 0, 1000, 1000, "transparent", [
+	SVGEditorWorkingPaper(20, 30, 500, 500, "aquamarine", [
+		SVGPicture(25, 30, 200, 150, "https://fujifilm-x.com/wp-content/uploads/2021/01/gfx100s_sample_04_thum-1.jpg"),
+		SVGGroup(300, 250, 100, 90, "purple", [
+			SVGEllipse(50, 50, 20, 30, "green"),
+			SVGText(0, 0, 100, 10, "hello again", "blue")
+		]),
+		SVGText(20, 30, 100, 19, "hello world"),
+		SVGEllipse(80, 90, 20, 15, "yellow"),
+		SVGRect(120, 150, 20, 15, "violet")
+	]),
+	Rect(0, 0, 0, 0)
+])
+
+s = Stage(l)
+s.start()
+
+l.lower_widgets[0].set_scale(3, 1.5)
+l.lower_widgets[0].lower_widgets[1].set_scale(2, 1)
+l.lower_widgets[0].append(SVGEllipse(280, 190, 20, 15, "orange"))
+l.lower_widgets[0].append(SVGLine([10, 20, 30, 40, 30, 90], "blue"))
+l.lower_widgets[0].lower_widgets[3].border = Border(2, "black")
+
+s.ctx.fillStyle = "red"
+s.ctx.fillRect(20 + 500, 30 + 500, 10, 10)
+
+print(l.lower_widgets[0].to_svg())
+
+def on_redraw(evt):
+	s.auto_flush = True
+
+document.getElementById("redraw_button").addEventListener("click", on_redraw)
+
+</script>
+</body>
+</html>
