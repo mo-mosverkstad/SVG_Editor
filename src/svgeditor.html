@@ -563,11 +563,15 @@ class SVGPaper(LayoutBase):
 			lower_widget = self.lower_widgets[i]
 			if lower_widget.is_inside(x, y, (width, height)):
 				if not transform.has(lower_widget):
+					transform.unselect_all()
 					transform.select_node(lower_widget, (width, height))
 					transform.view()
 					self.editor.win.require_refresh()
 				selected = True
 				break
+			else:
+				if not transform.has(lower_widget):
+					selected = False
 		if not selected:
 			transform.unselect_all()
 			self.editor.win.require_refresh()
