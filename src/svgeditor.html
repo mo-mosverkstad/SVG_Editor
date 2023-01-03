@@ -92,10 +92,10 @@ class Editor:
 		#self.layout = TestElement([Len(220, 7), Len(230, 8), Len(100, 5), Len(-19, 9)], "green", (1, "silver"), pi/6, "Hello world")
 		#self.layout = TestElement([Len(50, 9), Len(22, 8), Len(110, 3), Len(80, 7), Len(38, 11), Len(121, 9)], "orange", (3, "teal"), 0)
 		self.transform = Transform()
-		self.layout = SVGPaper([Len(190), Len(210), Len(220), Len(206)], "grey", (1, "gold"), pi/6, [
+		self.layout = SVGPaper([Len(190), Len(210), Len(220), Len(206)], "grey", (1, "gold"), 0, [
 			SVGRect([Len(10, 3), Len(10, 5), Len(100, 9), Len(50, 7)], "orange", rotation = pi/6),
 			SVGLine([Len(0, 2), Len(4, 8), Len(22, 3), Len(112, 5), Len(100, 7), Len(112, 3)], "transparent", (2, "blue"), pi/6),
-			SVGEllipse([Len(22, 3), Len(44), Len(12, 2), Len(2, 35)], "green"),
+			SVGEllipse([Len(22, 3), Len(44), Len(12, 2), Len(2, 35)], "green", rotation = pi/3),
 			self.transform
 		])
 		self.layout.editor = self
@@ -260,6 +260,20 @@ class GraphicsObject(ABC):
 			event_type = event_type + "_out"
 		if hasattr(self, event_type):
 			getattr(self, event_type)(x, y, event)
+			
+	def to_rect_rotate(self, upper_dim):
+		x_min, y_min, x_max, y_max = self.to_rect(upper_dim)
+		x_center = (x_min + x_max)/2
+		y_center = (y_min + y_max)/2
+		x11, y11 = TransTools.rotate(x_min, y_min, x_center, y_center, self.rotation)
+		x21, y21 = TransTools.rotate(x_max, y_min, x_center, y_center, self.rotation)
+		x12, y12 = TransTools.rotate(x_min, y_max, x_center, y_center, self.rotation)
+		x22, y22 = TransTools.rotate(x_max, y_max, x_center, y_center, self.rotation)
+		new_x_min = min(x11, x21, x12, x22)
+		new_y_min = min(y11, y21, y12, y22)
+		new_x_max = max(x11, x21, x12, x22)
+		new_y_max = max(y11, y21, y12, y22)
+		return [new_x_min, new_y_min, new_x_max, new_y_max]
 		
 	@abstractmethod
 	def _render(self, ctx, pos):
@@ -447,7 +461,18 @@ class Transform(LayoutBase):
 			self.pos = [Len(t_x_min), Len(t_y_min), Len(t_x_max - t_x_min), Len(t_y_max - t_y_min)]
 			self.rotation = node.rotation
 		else:
-			print("multiselecting")
+			print("multiselect")
+			t_x1, t_y1, t_x2, t_y2 = self.to_rect_rotate(upper_dim)
+			n_x1, n_y1, n_x2, n_y2 = node.to_rect_rotate(upper_dim)
+			self.rotation = 0
+			total_x_min = min(t_x1, t_x2, n_x1, n_x2)
+			total_y_min = min(t_y1, t_y2, n_y1, n_y2)
+			total_x_max = max(t_x1, t_x2, n_x1, n_x2)
+			total_y_max = max(t_y1, t_y2, n_y1, n_y2)
+			
+			#print(new_x_min, new_y_min)
+			self.pos = [Len(total_x_min), Len(total_y_min), Len(total_x_max - total_x_min), Len(total_y_max - total_y_min)]
+
 		self.selected_nodes.append(node)
 		
 	def unselect_all(self):
