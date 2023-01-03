@@ -446,6 +446,8 @@ class Transform(LayoutBase):
 			t_x_min, t_y_min, t_x_max, t_y_max = node.to_rect(upper_dim)
 			self.pos = [Len(t_x_min), Len(t_y_min), Len(t_x_max - t_x_min), Len(t_y_max - t_y_min)]
 			self.rotation = node.rotation
+		else:
+			print("multiselecting")
 		self.selected_nodes.append(node)
 		
 	def unselect_all(self):
@@ -562,8 +564,9 @@ class SVGPaper(LayoutBase):
 		for i in range(len(self.lower_widgets)-2, -1, -1):
 			lower_widget = self.lower_widgets[i]
 			if lower_widget.is_inside(x, y, (width, height)):
-				if not transform.has(lower_widget):
+				if not event.ctrlKey and not transform.has(lower_widget):
 					transform.unselect_all()
+				if not transform.has(lower_widget):
 					transform.select_node(lower_widget, (width, height))
 					transform.view()
 					self.editor.win.require_refresh()
