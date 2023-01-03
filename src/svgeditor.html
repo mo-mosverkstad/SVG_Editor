@@ -92,11 +92,13 @@ class Editor:
 		#self.layout = TestElement([Len(220, 7), Len(230, 8), Len(100, 5), Len(-19, 9)], "green", (1, "silver"), pi/6, "Hello world")
 		#self.layout = TestElement([Len(50, 9), Len(22, 8), Len(110, 3), Len(80, 7), Len(38, 11), Len(121, 9)], "orange", (3, "teal"), 0)
 		self.transform = Transform()
-		self.layout = TestLayout([Len(190), Len(210), Len(220), Len(206)], "grey", (1, "gold"), pi/6, [
-			TestRect([Len(10, 5), Len(10, 8), Len(100, 8), Len(50, -4)], "orange", rotation = pi/6),
-			TestLine([Len(0, 2), Len(4, 8), Len(22, 3), Len(112, 5), Len(100, 7), Len(112, 3)], "transparent", (2, "blue"), pi/6),
+		self.layout = SVGPaper([Len(190), Len(210), Len(220), Len(206)], "grey", (1, "gold"), pi/6, [
+			SVGRect([Len(10, 3), Len(10, 5), Len(100, 9), Len(50, 7)], "orange", rotation = pi/6),
+			SVGLine([Len(0, 2), Len(4, 8), Len(22, 3), Len(112, 5), Len(100, 7), Len(112, 3)], "transparent", (2, "blue"), pi/6),
+			SVGEllipse([Len(22, 3), Len(44), Len(12, 2), Len(2, 35)], "green"),
 			self.transform
 		])
+		self.layout.editor = self
 		self.win = GraphWin(self.layout, window.innerWidth - 250 - 250, window.innerHeight - 75)
 		self.__start()
 		
@@ -108,7 +110,8 @@ class Editor:
 		
 		
 	def run(self):
-		self.transform.view()
+		#self.transform.view()
+		print("running")
 		
 class GraphWin:
 	def __init__(self, layout, width = 800, height = 500):
@@ -123,7 +126,7 @@ class GraphWin:
 		
 	def __start(self):
 		print("onboard start")
-		window.setInterval(self.__app_loop, 500)
+		window.setInterval(self.__app_loop, 100)
 		self.__canvas.addEventListener("touchstart", self.__touchstart)
 		self.__canvas.addEventListener("touchmove", self.__touchmove)
 		self.__canvas.addEventListener("touchend", self.__touchend)
@@ -200,8 +203,20 @@ class Len:
 	px: float
 	perc: Optional[float] = 0
 	
+	def __check_type(self, other):
+		if type(other) != type(self):
+			raise TypeError(f"Cannot add Len with {type(other).__name__}")
+	
 	def explicit(self, upper):
 		return (self.perc * upper) / 100 + self.px
+		
+	def add(self, other):
+		self.__check_type(other)
+		return Len(self.px + other.px, self.perc + other.perc)
+		
+	def subtract(self, other):
+		self.__check_type(other)
+		return Len(self.px - other.px, self.perc - other.perc)
 		
 class TransTools:
 	@staticmethod
@@ -255,6 +270,14 @@ class GraphicsObject(ABC):
 		pass
 		
 	@abstractmethod
+	def to_rect(self, upper_dim):
+		pass
+		
+	@abstractmethod
+	def move(self, delta_x, delta_y):
+		pass
+		
+	@abstractmethod
 	def is_inside(self, x, y):
 		pass
 		
@@ -273,6 +296,17 @@ class Line(GraphicsObject):
 		for i in range(2, len(pos), 2):
 			ctx.lineTo(pos[i] - x_min, pos[i+1] - y_min)
 		ctx.stroke()
+		
+	def to_rect(self, upper_dim):
+		pos = self.get_pos(upper_dim)
+		x_pos = pos[0::2]
+		y_pos = pos[1::2]
+		return min(x_pos), min(y_pos), max(x_pos), max(y_pos)
+		
+	def move(self, delta_x, delta_y):
+		for i in range(0, len(self.pos), 2):
+			self.pos[ i ] = self.pos[ i ].add(delta_x)
+			self.pos[i+1] = self.pos[i+1].add(delta_y)
 		
 	def is_inside(self, x, y, upper_dim):
 		pos = self.get_pos(upper_dim)
@@ -312,6 +346,14 @@ class Rect(GraphicsObject):
 		ctx.strokeRect(0, 0, width, height)
 		ctx.closePath()
 		
+	def to_rect(self, upper_dim):
+		x, y, width, height = Rect.fix(self.get_pos(upper_dim))
+		return x, y, x + width, y + height
+		
+	def move(self, delta_x, delta_y):
+		self.pos[0] = self.pos[0].add(delta_x)
+		self.pos[1] = self.pos[1].add(delta_y)
+		
 	def is_inside(self, x, y, upper_dim):
 		xr, yr, width, height = Rect.fix(self.get_pos(upper_dim))
 		x, y = TransTools.rotate(x, y, xr + width/2, yr + height/2, -self.rotation)
@@ -330,6 +372,10 @@ class Ellipse(Rect):
 		ctx.closePath()
 		ctx.fill()
 		ctx.stroke()
+		
+	def to_rect(self, upper_dim):
+		x, y, width, height = Rect.fix(self.get_pos(upper_dim))
+		return x - width, y - height, x + width, y + height
 		
 	def is_inside(self, x, y, upper_dim):
 		xr, yr, width, height = Rect.fix(self.get_pos(upper_dim))
@@ -382,14 +428,48 @@ class LayoutBase(Rect):
 			
 class Transform(LayoutBase):
 	def __init__(self):
-		super().__init__([Len(0), Len(0), Len(0), Len(0)], "transparent", (0, "transparent"), 0, [])
-		self.lower_nodes = []
+		super().__init__([Len(0), Len(0), Len(0), Len(0)], "transparent", (0, "transparent"), 0, [
+			Ellipse([Len(0     ), Len(0     ), Len(5), Len(5)], "transparent"),
+			Ellipse([Len(0, 100), Len(0     ), Len(5), Len(5)], "transparent"),
+			Ellipse([Len(0     ), Len(0, 100), Len(5), Len(5)], "transparent"),
+			Ellipse([Len(0, 100), Len(0, 100), Len(5), Len(5)], "transparent"),
+			Ellipse([Len(0     ), Len(0,  50), Len(5), Len(5)], "transparent"),
+			Ellipse([Len(0,  50), Len(0     ), Len(5), Len(5)], "transparent"),
+			Ellipse([Len(0,  50), Len(0, 100), Len(5), Len(5)], "transparent"),
+			Ellipse([Len(0, 100), Len(0,  50), Len(5), Len(5)], "transparent"),
+		])
+		self.selected_nodes = []
+		self.active = False
+		
+	def select_node(self, node, upper_dim):
+		if len(self.selected_nodes) == 0:
+			t_x_min, t_y_min, t_x_max, t_y_max = node.to_rect(upper_dim)
+			self.pos = [Len(t_x_min), Len(t_y_min), Len(t_x_max - t_x_min), Len(t_y_max - t_y_min)]
+			self.rotation = node.rotation
+		self.selected_nodes.append(node)
+		
+	def unselect_all(self):
+		self.selected_nodes.clear()
+		self.hide()
+		
+	def has(self, widget):
+		for selected_node in self.selected_nodes:
+			if widget is selected_node:
+				return True
+		return False
 		
 	def view(self):
 		self.border = (1, "red")
+		for lower_widget in self.lower_widgets:
+			lower_widget.color = "red"
+		self.active = True
 		
 	def hide(self):
 		self.border = (0, "transparent")
+		for lower_widget in self.lower_widgets:
+			lower_widget.color = "transparent"
+		self.pos = [Len(0), Len(0), Len(0), Len(0)]
+		self.active = False
 		
 class TestElement:
 	def on_touch_start(self, x, y, event):
@@ -453,6 +533,92 @@ class TestRect(Rect, TestElement):
 	pass
 	
 class TestLayout(LayoutBase, TestElement):
+	pass
+	
+class SVGPaper(LayoutBase):
+	"""
+	def mouse_event(self, event_type, x, y, event, upper_dim = (0, 0)):
+		xr, yr, width, height = Rect.fix(self.get_pos(upper_dim))
+		x = (x - xr) / self.scale[0]
+		y = (y - yr) / self.scale[1]
+		x, y = TransTools.rotate(x, y, width/2, height/2, -self.rotation)
+		for i in range(len(self.lower_widgets)-1, -1, -1):
+			lower_widget = self.lower_widgets[i]
+			lower_widget.mouse_event(event_type, x, y, event, (width, height))
+			if lower_widget.is_inside(x, y, (width, height)):
+				break
+	"""
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.old_pos = (0, 0)
+	
+	def on_mouse_down(self, x, y, event):
+		xr, yr, width, height = Rect.fix(self.get_pos((0, 0)))
+		x = (x - xr) / self.scale[0]
+		y = (y - yr) / self.scale[1]
+		x, y = TransTools.rotate(x, y, width/2, height/2, -self.rotation)
+		selected = False
+		transform = self.lower_widgets[-1]
+		for i in range(len(self.lower_widgets)-2, -1, -1):
+			lower_widget = self.lower_widgets[i]
+			if lower_widget.is_inside(x, y, (width, height)):
+				if not transform.has(lower_widget):
+					transform.select_node(lower_widget, (width, height))
+					transform.view()
+					self.editor.win.require_refresh()
+				selected = True
+				break
+		if not selected:
+			transform.unselect_all()
+			self.editor.win.require_refresh()
+			
+	def on_drag_start(self, x, y, event):
+		transform = self.lower_widgets[-1]
+		xr, yr, width, height = Rect.fix(self.get_pos((0, 0)))
+		x = (x - xr) / self.scale[0]
+		y = (y - yr) / self.scale[1]
+		x, y = TransTools.rotate(x, y, width/2, height/2, -self.rotation)
+		self.old_pos = (x, y)
+	
+	def on_drag(self, x, y, event):
+		transform = self.lower_widgets[-1]
+		if transform.active:
+			xr, yr, width, height = Rect.fix(self.get_pos((0, 0)))
+			x = (x - xr) / self.scale[0]
+			y = (y - yr) / self.scale[1]
+			x, y = TransTools.rotate(x, y, width/2, height/2, -self.rotation)
+			old_x, old_y = self.old_pos
+			delta_x = x - old_x
+			delta_y = y - old_y
+			transform.move(Len(delta_x), Len(delta_y))
+			for selected_node in transform.selected_nodes:
+				selected_node.move(Len(delta_x), Len(delta_y))
+			self.editor.win.require_refresh()
+		self.old_pos = (x, y)
+	
+class SVGHandlers:
+	"""
+	def on_mouse_down(self, x, y, event):
+		print("on mouse down on svg handler", self)
+	"""
+	pass
+		
+class SVGLine(Line, SVGHandlers):
+	pass
+	
+class SVGRect(Rect, SVGHandlers):
+	pass
+	
+class SVGEllipse(Ellipse, SVGHandlers):
+	pass
+	
+class SVGText(Text, SVGHandlers):
+	pass
+	
+class SVGImage(Image, SVGHandlers):
+	pass
+	
+class SVGGroup(LayoutBase, SVGHandlers):
 	pass
 	
 		
