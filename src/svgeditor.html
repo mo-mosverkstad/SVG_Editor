@@ -104,10 +104,13 @@ class Editor:
 		
 	def __start(self):
 		window.addEventListener("resize", self.__resize)
+		document.getElementById("tool_cursor").addEventListener("click", self.__click_tool_cursor)
 		
 	def __resize(self, event):
 		self.win.set_size(window.innerWidth - 250 - 285, window.innerHeight - 75)
 		
+	def __click_tool_cursor(self, event):
+		print("tool cursor pressed", self, event)
 		
 	def run(self):
 		#self.transform.view()
@@ -443,17 +446,18 @@ class LayoutBase(Rect):
 class Transform(LayoutBase):
 	def __init__(self):
 		super().__init__([Len(0), Len(0), Len(0), Len(0)], "transparent", (0, "transparent"), 0, [
-			Ellipse([Len(0     ), Len(0     ), Len(5), Len(5)], "transparent"),
-			Ellipse([Len(0, 100), Len(0     ), Len(5), Len(5)], "transparent"),
-			Ellipse([Len(0     ), Len(0, 100), Len(5), Len(5)], "transparent"),
-			Ellipse([Len(0, 100), Len(0, 100), Len(5), Len(5)], "transparent"),
-			Ellipse([Len(0     ), Len(0,  50), Len(5), Len(5)], "transparent"),
-			Ellipse([Len(0,  50), Len(0     ), Len(5), Len(5)], "transparent"),
-			Ellipse([Len(0,  50), Len(0, 100), Len(5), Len(5)], "transparent"),
-			Ellipse([Len(0, 100), Len(0,  50), Len(5), Len(5)], "transparent"),
+			ResizeWidget([Len(0     ), Len(0     ), Len(5), Len(5)], "transparent"),
+			ResizeWidget([Len(0, 100), Len(0     ), Len(5), Len(5)], "transparent"),
+			ResizeWidget([Len(0     ), Len(0, 100), Len(5), Len(5)], "transparent"),
+			ResizeWidget([Len(0     ), Len(0,  50), Len(5), Len(5)], "transparent"),
+			ResizeWidget([Len(0,  50), Len(0     ), Len(5), Len(5)], "transparent"),
+			ResizeWidget([Len(0,  50), Len(0, 100), Len(5), Len(5)], "transparent"),
+			ResizeWidget([Len(0, 100), Len(0,  50), Len(5), Len(5)], "transparent"),
+			ResizeWidget([Len(0, 100), Len(0, 100), Len(5), Len(5)], "transparent"),
 		])
 		self.selected_nodes = []
 		self.active = False
+		self.lower_widgets[-1].changable = True
 		
 	def select_node(self, node, upper_dim):
 		if len(self.selected_nodes) == 0:
@@ -497,6 +501,26 @@ class Transform(LayoutBase):
 			lower_widget.color = "transparent"
 		self.pos = [Len(0), Len(0), Len(0), Len(0)]
 		self.active = False
+		
+	def is_inside_resize_widgets(self, x, y, upper_dim):
+		xr, yr, width, height = Rect.fix(self.get_pos(upper_dim))
+		x = (x - xr) / self.scale[0]
+		y = (y - yr) / self.scale[1]
+		x, y = TransTools.rotate(x, y, width/2, height/2, -self.rotation)
+		for resize_widget in self.lower_widgets:
+			if resize_widget.is_inside(x, y, (width, height)):
+				return True
+		return False
+		
+class ResizeWidget(Ellipse):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.changable = False
+		self.old_pos = (0, 0)
+	
+	def on_drag_start(self, x, y, event):
+		if self.changable:
+			print("on drag start", x, y)
 		
 class TestElement:
 	def on_touch_start(self, x, y, event):
@@ -600,6 +624,9 @@ class SVGPaper(LayoutBase):
 			else:
 				if not transform.has(lower_widget):
 					selected = False
+		if transform.is_inside_resize_widgets(x, y, (width, height)):
+			selected = True
+			transform.active = False
 		if not selected:
 			transform.unselect_all()
 			self.editor.win.require_refresh()
@@ -685,7 +712,7 @@ if __name__ == "__main__":
 			<div class = "imgtool" style = "background-position: -72px -72px; width: 10px;"></div>
 		</div>
 		<div class = "imgtoolgroup">
-			<div class = "imgtool" style = "background-position: -18px -36px"></div>
+			<div class = "imgtool" style = "background-position: -18px -36px" id = "tool_cursor"></div>
 			<div class = "imgtool" style = "background-position: -72px -72px; width: 10px;"></div>
 			<div class = "imgtool" style = "background-position: -18px -54px"></div>
 			<div class = "imgtool" style = "background-position: -72px -72px; width: 10px;"></div>
