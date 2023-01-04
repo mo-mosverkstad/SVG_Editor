@@ -15,12 +15,17 @@ This repository is for the SVG editor
 - [x]  Workplace (HTML5 canvas)
     - [x]  Canvas initializing
     - [x]  Widget (shape and layout)
-        - [x]  Percentage (Relative units)
-        - [ ]  Scale
-        - [x]  Rotation
-        - [x]  Moving
-        - [x]  Multiselecting
-        - [ ]  Resizing
+        - [x] Positional properties:
+            - [x]  Percentage (Relative units)
+            - [ ]  Scale
+            - [x]  Rotation
+            - [x]  Moving
+            - [x]  Multiselecting
+            - [ ]  Resizing
+        - [x]  Color properties:
+            - [x]  Colors
+            - [x]  Borders
+            - [ ]  Gradients
     - [x]  Events handler
       - [x]  Mouse Event
         - [x]  Drag and drop events
